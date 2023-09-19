@@ -1,0 +1,6 @@
+[Unit]
+Description=mount {{ item.path }}
+
+[Mount]
+Where={{ item.path }}
+What={{ item.src }}

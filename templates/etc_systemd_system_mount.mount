@@ -1,0 +1,15 @@
+[Unit]
+Description=mount {{ item.name }}
+DefaultDependencies=no
+#Requires=proc-fs-nfsd.mount
+#After=proc-fs-nfsd.mount
+#After=network.target local-fs.target
+#BindsTo=nfs-server.service
+
+Wants=nfs-mountd.service {{ item.after }}
+After=nfs-mountd.service {{ item.after }}
+
+[Mount]
+Where={{ item.path }}
+What={{ item.src }}
+Type=nfs4

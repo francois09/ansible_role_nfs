@@ -1,0 +1,25 @@
+---
+nfs__install: False
+nfs__configure: False
+nfs__client_configure: False
+
+nfs__default_packages:
+  - nfs-common
+  - nfs-kernel-server
+
+nfs__default_client_packages:
+  - nfs-common
+
+nfs__exports: []
+# nfs__owner: ""
+# nfs__group: ""
+
+nfs__rpcbind_state: started
+# We don't need rpcbind on NFSv4 !
+nfs__rpcbind_enabled: true
+
+nfs__pipefs: "/run/rpc_pipefs"
+nfs__mapping:
+  nobody_user: nobody
+  nobody_group: nogroup
+  # domain: null

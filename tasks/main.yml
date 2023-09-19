@@ -1,0 +1,172 @@
+---
+- name: NFS | Install packages
+  apt:
+    name: "{{ nfs__default_packages }}"
+    update_cache: yes
+    state: present
+  when: nfs__install
+
+- name: NFS | Stop rpcbind
+  service:
+    name: rpcbind.service
+    state: stopped
+  when: nfs__install and not nfs__rpcbind_enabled
+
+- name: NFS | Deactivate rpcbind
+  service:
+    name: rpcbind.service
+    enabled: no
+  when: nfs__install and not nfs__rpcbind_enabled
+
+- name: NFS | Mask rpcbind
+  service:
+    name: rpcbind.service
+    enabled: no
+    masked: yes
+    daemon_reload: yes
+  when: nfs__install and not nfs__rpcbind_enabled
+
+- name: NFS | Stop rpcbind.socket
+  service:
+    name: rpcbind.socket
+    state: stopped
+  when: nfs__install and not nfs__rpcbind_enabled
+
+- name: NFS | Deactivate rpcbind.socket
+  service:
+    name: rpcbind.socket
+    enabled: no
+  when: nfs__install and not nfs__rpcbind_enabled
+
+- name: NFS | Mask rpcbind.socket
+  service:
+    name: rpcbind.socket
+    enabled: no
+    masked: yes
+    daemon_reload: yes
+  when: nfs__install and not nfs__rpcbind_enabled
+
+- name: NFS | Install client packages
+  apt:
+    name: "{{ nfs__default_client_packages }}"
+    update_cache: yes
+    state: present
+  when: nfs__install or nfs__client_configure
+
+- name: NFS | Ensure directories to export exist
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ nfs__owner|default(item.owner|default('root')) }}"
+    group: "{{ nfs__group|default(item.group|default('root')) }}"
+  with_items: "{{ nfs__exports }}"
+  when: nfs__configure
+
+- name: NFS [ Setup /etc/exports file.
+  template:
+    src: etc_exports
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: 0644
+  notify: Reload nfs
+  when: nfs__configure
+
+- name: Configure NFS domain
+  template:
+    src: etc_idmapd_conf
+    dest: /etc/idmapd.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: Reload nfs
+  when: nfs__configure
+
+# - name: Configure NFS v4 kernel server
+#   template:
+#     src: etc_default_nfs-kernel-server
+#     dest: /etc/default/nfs-kernel-server
+#     owner: root
+#     group: root
+#     mode: 0644
+#   notify: Reload nfs
+#   when: nfs__configure
+
+- name: Configure NFS mountpoints
+  file:
+    path: "{{ item.path }}"
+    state: directory
+  with_items: "{{ nfs__mounts }}"
+  when:
+    - nfs__client_configure
+    - nfs__mounts is defined
+
+- name: Mount up NFS
+  mount:
+    src: "{{ item.src }}"
+    path: "{{ item.path }}"
+    fstype: "{{ item.type|default('nfs4') }}"
+    opts: "{{ item.options|default('_netdev,auto,noatime') }}"
+    passno: "0"
+    dump: "0"
+    state: mounted
+  with_items: "{{ nfs__mounts }}"
+  when:
+    - nfs__client_configure
+    - nfs__mounts is defined
+    - item.state is not defined or item.state == 'mounted'
+
+- name: Create systemd mount up
+  template:
+    src: etc_systemd_system_mount.mount
+    dest: "/etc/systemd/system/{{ item.path[1:] | replace('/','-') }}.mount"
+  with_items: "{{ nfs__mounts }}"
+  when:
+    - nfs__client_configure
+    - nfs__mounts is defined
+    - item.state is not defined or item.state == 'mounted'
+    - item.systemd is defined
+    - item.name is defined
+
+- name: Umount from fstab
+  mount:
+    src: "{{ item.src }}"
+    path: "{{ item.path }}"
+    fstype: "{{ item.type|default('nfs4') }}"
+    opts: "{{ item.options|default('_netdev,auto,noatime') }}"
+    passno: "0"
+    dump: "0"
+    state: unmounted
+  with_items: "{{ nfs__mounts }}"
+  when:
+    - nfs__client_configure
+    - nfs__mounts is defined
+    - item.state is defined
+    - item.state == 'unmounted' or item.state == 'absent'
+
+- name: Delete from fstab
+  mount:
+    src: "{{ item.src }}"
+    path: "{{ item.path }}"
+    fstype: "{{ item.type|default('nfs4') }}"
+    opts: "{{ item.options|default('_netdev,auto,noatime') }}"
+    passno: "0"
+    dump: "0"
+    state: absent
+  with_dict: "{{ nfs__mounts }}"
+  when:
+    - nfs__client_configure
+    - nfs__mounts is defined
+    - item.state is defined
+    - item.state == 'absent'
+
+# 
+# 
+# - name: Ensure nfs is running.
+#   service:
+#     - name: "{{ nfs__server_daemon }}"
+#       state: started
+#       enabled: yes
+#   when:
+#     - nfs__exports|length
+#     - nfs__configure
